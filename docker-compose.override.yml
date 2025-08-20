@@ -1,0 +1,18 @@
+version: '3.8'
+
+services:
+  api:
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+    volumes:
+      - ./apps/api:/app/source
+      - /app/source/bin
+      - /app/source/obj
+
+  frontend:
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./apps/frontend:/app/source
+      - /app/source/node_modules
+      - /app/source/.next

@@ -1,0 +1,32 @@
+{
+  "name": "demo-cicd-app",
+  "version": "1.0.0",
+  "private": true,
+  "description": "DEMO CI-CD Test Application with Turbopack",
+  "scripts": {
+    "dev": "concurrently \"pnpm --filter frontend dev\" \"dotnet run --project apps/api\"",
+    "dev:turbo": "concurrently \"pnpm --filter frontend run dev\" \"dotnet run --project apps/api\"",
+    "dev:legacy": "concurrently \"pnpm --filter frontend run dev:legacy\" \"dotnet run --project apps/api\"",
+    "build": "pnpm --filter frontend build && dotnet build apps/api",
+    "frontend:dev": "pnpm --filter frontend dev",
+    "frontend:dev:legacy": "pnpm --filter frontend dev:legacy",
+    "frontend:build": "pnpm --filter frontend build",
+    "frontend:install": "pnpm --filter frontend install",
+    "api:dev": "dotnet run --project apps/api",
+    "api:build": "dotnet build apps/api",
+    "api:restore": "dotnet restore apps/api",
+    "docker:up": "docker-compose up --build",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f",
+    "clean": "pnpm --filter frontend clean && dotnet clean apps/api",
+    "setup": "pnpm install && pnpm api:restore"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0"
+  },
+  "engines": {
+    "node": "22.18.0",
+    "pnpm": "10.14.0"
+  },
+  "packageManager": "pnpm@10.14.0"
+}
