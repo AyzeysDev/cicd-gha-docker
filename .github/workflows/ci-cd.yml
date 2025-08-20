@@ -130,6 +130,10 @@ jobs:
     needs: [build-and-push]
     runs-on: ubuntu-latest
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      security-events: write # Required to upload SARIF results
+      actions: read          # Required for private repositories
+      contents: read         # Required to checkout the code
     
     steps:
       - name: Checkout code
