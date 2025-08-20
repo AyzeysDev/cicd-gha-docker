@@ -132,6 +132,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     
     steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
       - name: Run Trivy vulnerability scanner on frontend
         uses: aquasecurity/trivy-action@master
         with:
@@ -146,15 +149,14 @@ jobs:
           format: 'sarif'
           output: 'trivy-api-results.sarif'
 
-      - name: Fetch SARIF files
-        uses: actions/download-artifact@v4
-        with:
-          path: ../results
-          pattern: sarif-*
-          merge-multiple: true
-
-      - name: Upload Trivy scan results to GitHub Security tab
+      - name: Upload frontend scan results
         uses: github/codeql-action/upload-sarif@v3
-        if: always()
         with:
-          sarif_file: '.'
+          sarif_file: 'trivy-frontend-results.sarif'
+          category: frontend
+
+      - name: Upload API scan results
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-api-results.sarif'
+          category: api
