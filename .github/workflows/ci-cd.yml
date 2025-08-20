@@ -1,0 +1,153 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  REGISTRY: docker.io
+  FRONTEND_IMAGE_NAME: ayzeysdev/cicd-frontend
+  API_IMAGE_NAME: ayzeysdev/cicd-api
+
+jobs:
+  # Build and Test Jobs
+  test-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22.18.0'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: '10.14.0'
+          
+      - name: Create .npmrc for CI
+        run: echo "node-linker=hoisted" > .npmrc
+
+      - name: Install dependencies (from root)
+        run: pnpm install --frozen-lockfile
+
+      - name: Run linting
+        run: pnpm --filter frontend lint
+
+      - name: Type check
+        run: pnpm --filter frontend type-check
+
+      - name: Build frontend
+        run: pnpm --filter frontend build
+
+  test-api:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.413'
+
+      - name: Restore dependencies
+        run: dotnet restore ./apps/api
+
+      - name: Build API
+        run: dotnet build ./apps/api --configuration Release --no-restore
+
+      - name: Run tests (if any)
+        run: dotnet test ./apps/api --configuration Release --no-build --verbosity normal
+
+  # Docker Build and Push Jobs
+  build-and-push:
+    needs: [test-frontend, test-api]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Extract metadata for frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.FRONTEND_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Extract metadata for API
+        id: meta-api
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.API_IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./apps/frontend/Dockerfile
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push API image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./apps/api
+          file: ./apps/api/Dockerfile
+          push: true
+          tags: ${{ steps.meta-api.outputs.tags }}
+          labels: ${{ steps.meta-api.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Security Scanning
+  security-scan:
+    needs: [build-and-push]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: Run Trivy vulnerability scanner on frontend
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.FRONTEND_IMAGE_NAME }}:latest'
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+
+      - name: Run Trivy vulnerability scanner on API
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: '${{ env.API_IMAGE_NAME }}:latest'
+          format: 'sarif'
+          output: 'trivy-api-results.sarif'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: '.'
